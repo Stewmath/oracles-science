@@ -1,10 +1,21 @@
 -- Displays helpful info to the screen, and does other stuff too.
 
+-- Don't use require because it's wonky with bizhawk? (need to reset bizhawk for
+-- changes to propogate, it seems)
+local gb = dofile('lib\\gb.lua')
+local common = dofile('lib\\common.lua')
+local lists = dofile('lib\\lists.lua')
+
 local COL_PIXELS = 16
 local ROW_PIXELS = 16
 
+local PROMPT_ROW = 20
+
+-- Memory constants for seasons (rom)
+local giveTreasure = 0x16eb -- TODO: ages is 171c
 -- Memory constants for seasons (wram)
 local wLoadedObjectGfx = 0xc07
+local wStatusBarNeedsRefresh = 0xbea
 --
 
 keysPressed = {}
@@ -31,7 +42,7 @@ end
 
 -- Cheat function handlers
 function toggleWTW()
-    print('TOGGLE')
+    common.pushMemDomain()
     memory.usememorydomain("ROM")
 
     addr = 0x4000*5 + 0x1c96 -- TODO: ages addr is 05:5da5
@@ -42,32 +53,85 @@ function toggleWTW()
         memory.writebyte(addr, 0xaf) -- xor a
         cheatEnabled['WTW'] = true
     end
+    common.popMemDomain()
+end
 
-    memory.usememorydomain("WRAM")
+function triggerItemMenu()
+    -- Get item type
+    item = 0
+    while true do
+        handleInput()
+
+        if keysJustPressed['NumberPad8'] and item < 255 then
+            item = item+1
+        end
+        if keysJustPressed['NumberPad2'] and item > 0 then
+            item = item-1
+        end
+        if keysJustPressed['NumberPadEnter'] then
+            break
+        end
+        if keysJustPressed['Escape'] then
+            return
+        end
+
+        name = lists.items[item]
+        if name == nil then
+            name = ''
+        end
+        gui.text(0, PROMPT_ROW * ROW_PIXELS, string.format("Get Item: %.2x %s", item, name))
+        emu.yield()
+    end
+
+    level = 0
+    -- Get item level (TODO: factor out into function)
+    while true do
+        handleInput()
+
+        if keysJustPressed['NumberPad8'] and level < 255 then
+            level = level+1
+        end
+        if keysJustPressed['NumberPad2'] and level > 0 then
+            level = level-1
+        end
+        if keysJustPressed['NumberPadEnter'] then
+            break
+        end
+        if keysJustPressed['Escape'] then
+            return
+        end
+
+        gui.text(0, PROMPT_ROW * ROW_PIXELS, string.format("Level/Amount: %.2x", level))
+        emu.yield()
+    end
+
+    gb.call(giveTreasure, {a=item, c=level})
+    memory.writebyte(wStatusBarNeedsRefresh, 0xff)
 end
 
 
 -- Cheat definitions
 cheatTable = {}
-cheatTable["WTW"] = {"NumberPad1", toggleWTW}
+cheatTable[1] = {"WTW",  "NumberPad1", toggleWTW}
+cheatTable[2] = {"ITEM", "NumberPad5", triggerItemMenu}
 
 cheatEnabled = {}
 
 
 -- Display cheats and check for toggles
 function handleCheat(cheat)
-    local name = cheat
     local cheat = cheatTable[cheat]
-    local key = cheat[1]
-    local toggleFunc = cheat[2]
+    local name = cheat[1]
+    local key = cheat[2]
+    local toggleFunc = cheat[3]
 
     if keysJustPressed[key] then
-        toggleWTW()
+        toggleFunc()
     end
 
     local status
     if cheatEnabled[name] then
-        status = "ON"
+        status = "ON "
     else
         status = "OFF"
     end
@@ -77,11 +141,15 @@ function handleCheat(cheat)
 end
 
 
+
 -- Main code
+console.clear()
+
 while true do
     handleInput()
-    memory.usememorydomain("WRAM")
+    gui.clearGraphics()
 
+    gb.useWram()
     local numLoadedObjGfx = 0
     for addr = wLoadedObjectGfx, wLoadedObjectGfx+0x10, 2 do
         if not (memory.read_u8(addr) == 0) then
@@ -114,7 +182,10 @@ while true do
     gui.text(x, y, "CHEATS")
     y = y+ROW_PIXELS
 
-    table.foreach(cheatTable, handleCheat)
+    for cheat in pairs(cheatTable) do
+        handleCheat(cheat)
+    end
 
     emu.yield()
+    --emu.frameadvance()
 end
