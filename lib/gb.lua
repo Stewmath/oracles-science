@@ -1,9 +1,6 @@
--- Gameboy stuff (realistically it may be oracles-specific)
+-- Gameboy stuff (mostly should work for any gameboy game)
 local gb = {}
 local common = dofile('lib\\common.lua')
-
-wRamFunction = 0xc4b7  -- Location of a "jp" opcode to hook in "gb.call"
-wTempLocation = 0xce00 -- "wTmpVramBuffer" (code is written here temporarily)
 
 function gb.useWram()
     memory.usememorydomain('WRAM')
@@ -72,7 +69,11 @@ end
 -- We overwrite the current code being executing with our payload, and
 -- restore it to normal when we're done with it.
 function gb.call(funcToCall, registers)
-    local scratchLocation = 0x3fe0 -- temp location to write code to (it will be restored later)
+    -- temp location to write code to (it will be restored later)
+    -- This was chosen to work well for the oracles, but it should work for any
+    -- game as long as it's not something that's being called the moment this is
+    -- executed...
+    local scratchLocation = 0x3fe0
 
     if registers == nil then
         registers = {}
@@ -130,6 +131,5 @@ function gb.call(funcToCall, registers)
 
     end, funcToCall, 'callHook', 'System Bus')
 end
-
 
 return gb

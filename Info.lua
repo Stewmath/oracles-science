@@ -1,16 +1,22 @@
 -- Displays helpful info to the screen, and does other stuff too.
 
+console.clear()
+
 -- Don't use require because it's wonky with bizhawk? (need to reset bizhawk for
 -- changes to propogate, it seems)
-local gb = dofile('lib\\gb.lua')
 local common = dofile('lib\\common.lua')
-local lists = dofile('lib\\lists.lua')
+local gb     = dofile('lib\\gb.lua')
+local lists  = dofile('lib\\lists.lua')
+local ocl    = dofile('lib\\ocl.lua')
 
--- Memory constants for seasons (rom)
-local giveTreasure = 0x16eb -- TODO: ages is 171c
--- Memory constants for seasons (wram)
-local wLoadedObjectGfx = 0xc07
-local wStatusBarNeedsRefresh = 0xbea
+-- Memory constants (rom)
+local giveTreasure = ocl.AgSe(0x171c, 0x16eb)
+-- Memory constants (wram)
+local wActiveRing = ocl.AgSe(0x6cb, 0x6c5)
+local wGlobalFlags = ocl.AgSe(0x6d0, 0x6ca)
+local wStatusBarNeedsRefresh = ocl.AgSe(0xbe9, 0xbea)
+local wLoadedObjectGfx = ocl.AgSe(0xc08, 0xc07)
+local wLoadedObjectGfx = ocl.AgSe(0xc08, 0xc07)
 --
 
 -- Cheat function handlers
@@ -18,7 +24,7 @@ function toggleWTW()
     common.pushMemDomain()
     memory.usememorydomain("ROM")
 
-    addr = 0x4000*5 + 0x1c96 -- TODO: ages addr is 05:5da5
+    local addr = 0x4000*5 + ocl.AgSe(0x1da5, 0x1c96)
     if memory.readbyte(addr) == 0xaf then
         memory.writebyte(addr, 0x1a) -- ld a,(de)
         cheatEnabled['WTW'] = nil
@@ -31,21 +37,14 @@ end
 
 function triggerItemMenu()
     -- Get item type
-    item = 0
-    item = common.promptByte(function(item)
-        name = lists.items[item]
-        if name == nil then
-            name = ''
-        end
-        return string.format("Get Item: %.2x %s", item, name)
-    end)
+    local item = common.promptByteWithList("Get Item...", lists.items)
 
     if item == -1 then
         return
     end
 
     -- Get item level
-    level = common.promptByte(function(level)
+    local level = common.promptByte(function(level)
         return string.format("Level/Amount: %.2x", level)
     end)
 
@@ -57,11 +56,34 @@ function triggerItemMenu()
     memory.writebyte(wStatusBarNeedsRefresh, 0xff)
 end
 
+function triggerRingMenu()
+    local ring = common.promptByteWithList("Set Active Ring...", lists.rings, {min=0, max=0x40})
+    if ring == -1 then return end
+    memory.writebyte(wActiveRing, ring)
+end
+
+function triggerClearFlag()
+    local flag = common.promptByteWithList("Clear Flag...", lists.globalFlags)
+    if not (flag == -1) then
+        common.clearFlag(wGlobalFlags, flag)
+    end
+end
+
+function triggerSetFlag()
+    flag = common.promptByteWithList("Set Flag...", lists.globalFlags)
+    if not (flag == -1) then
+        common.setFlag(wGlobalFlags, flag)
+    end
+end
+
 
 -- Cheat definitions
 cheatTable = {}
 cheatTable[1] = {name="WTW",  toggle=true,  key="NumberPad1", func=toggleWTW}
-cheatTable[2] = {name="ITEM", toggle=false, key="NumberPad5", func=triggerItemMenu}
+cheatTable[2] = {name="RING", toggle=false, key="NumberPad4", func=triggerRingMenu}
+cheatTable[3] = {name="ITEM", toggle=false, key="NumberPad5", func=triggerItemMenu}
+cheatTable[4] = {name="CLEARFLAG", toggle=false, key="NumberPad8", func=triggerClearFlag}
+cheatTable[5] = {name="SETFLAG",   toggle=false, key="NumberPad9", func=triggerSetFlag}
 
 cheatEnabled = {}
 
@@ -86,20 +108,15 @@ function handleCheat(cheat)
     end
     local keyname = string.gsub(key, 'NumberPad', 'NP')
     if cheat.toggle then
-        common.textLine(string.format("%5s %5s: %s", keyname, name, status), color)
+        common.textLine(string.format("%5s %s: %s", keyname, name, status), color)
     else
-        common.textLine(string.format("%5s %5s", keyname, name, status))
+        common.textLine(string.format("%5s %s", keyname, name, status))
     end
 end
 
 
 
 -- Main code
-console.clear()
-
-
---gb.call(giveTreasure, {a=0x05,c=0x01})
-
 while true do
     common.handleInput()
     gui.clearGraphics()
