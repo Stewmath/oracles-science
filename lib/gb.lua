@@ -13,15 +13,19 @@ function gb.useSysBus()
     memory.usememorydomain('System Bus')
 end
 
-function gb.push(val)
-    memory.usememorydomain('System Bus')
-    sp = emu.getregister('SP')
-    s=sp-2
-    memory.write_u16_le(sp, val)
-    emu.setregister('SP', sp)
-end
-
 local function writeAndBackupMem(address, data)
+    common.pushMemDomain()
+
+    if address < 0x4000 then
+        -- We need to set the memory domain to 'ROM' if we're writing to ROM,
+        -- otherwise writes don't work.
+        memory.usememorydomain('ROM')
+    elseif address < 0x8000 then
+        assert(false) -- Can probably be implemented if I need it
+    else
+        memory.usememorydomain('System Bus')
+    end
+
     oldData = {}
     dataLen = table.getn(data)
 
@@ -29,78 +33,102 @@ local function writeAndBackupMem(address, data)
         addr = address + i - 1
         oldData[i] = memory.readbyte(addr)
         memory.writebyte(addr, data[i])
+        --print(string.format('%.4x = %.2x', addr, data[i])) -- Debug output
     end
 
+    common.popMemDomain()
     return oldData
 end
 
--- Hook a function call when a RAM function is called.
--- This may not work in menus. (the result will trigger after the menu.)
--- TODO: make this work in menus
+-- UNTESTED
+function gb.setRegister(name, val)
+    assert(val >= 0 and val <= 255)
+
+    pc = emu.getregister('pc')
+    if name == 'pc' then
+        assert(false) -- TODO
+    else
+        opcodeTable = {
+            a=0x3e,
+            b=0x06,
+            c=0x0e,
+            d=0x16,
+            e=0x1e
+        }
+        opcode = opcodeTable[name]
+        assert(not (opcode == nil))
+
+        code = {opcode, val, 0x18, 0xfc} -- ld {reg},val; jr -4
+        backup = writeAndBackupMem(pc, code)
+        event.onmemoryexecute(function()
+            writeAndBackupMem(pc, backup)
+            event.unregisterbyname('registerSetHook') -- TODO: unregisterbyguid
+        end, pc, 'registerSetHook', 'System Bus')
+    end
+end
+
+-- Save current registers and call to a function.
+-- Gambatte doesn't support "emu.setregister", so we have to get tricky.
+-- We overwrite the current code being executing with our payload, and
+-- restore it to normal when we're done with it.
 function gb.call(funcToCall, registers)
-    -- Gambatte doesn't support "emu.setregister", so we have to get tricky.
-    -- We create a function in RAM, and overwrite a function pointer to jump
-    -- there.
+    local scratchLocation = 0x3fe0 -- temp location to write code to (it will be restored later)
 
     if registers == nil then
         registers = {}
     end
-    if registers["a"] == nil then
-        registers["a"] = 0
-    end
-    if registers["b"] == nil then
-        registers["b"] = 0
-    end
-    if registers["c"] == nil then
-        registers["c"] = 0
-    end
-    if registers["d"] == nil then
-        registers["d"] = 0
-    end
-    if registers["e"] == nil then
-        registers["e"] = 0
-    end
-    if registers["h"] == nil then
-        registers["h"] = 0
-    end
-    if registers["l"] == nil then
-        registers["l"] = 0
+
+    local registerList = {'a','b','c','d','e','h','l'}
+    for _,r in pairs(registerList) do
+        if registers[r] == nil then
+            registers[r] = 0
+        end
     end
 
-    local function hook()
-        assert(emu.getregister('PC') == wRamFunction)
-        event.unregisterbyname('ramCallHook')
-        gb.useSysBus()
+    local pc = emu.getregister('pc')
 
-        oldJump = memory.read_u16_le(wRamFunction+1)
-        print(wTempLocation)
-        memory.write_u16_le(wRamFunction+1, wTempLocation)
+    -- Save registers, set them to given values, push return address, jump to
+    -- scratchLocation
+    local callCode = {0xf5,0xc5,0xd5,0xe5, -- push all
+        0x01, bit.band(scratchLocation, 0xff), bit.rshift(scratchLocation, 8), -- ld bc,scratchLocation
+        0xc5, -- push bc
+        0x3e, registers["a"],
+        0x01, registers["c"], registers["b"],
+        0x11, registers["e"], registers["d"],
+        0x21, registers["l"], registers["h"],
+        0xc3, bit.band(funcToCall,0xff), bit.rshift(funcToCall, 8),
+    }
 
-        -- Save registers, set them to given values, call function, restore
-        -- registers, return. (Technically should jump to the function call we
-        -- hooked, but it's just a sprite drawing thing.)
-        callCode = {0xf5,0xc5,0xd5,0xe5,
-            0x3e, registers["a"],
-            0x01, registers["c"], registers["b"],
-            0x11, registers["e"], registers["d"],
-            0x21, registers["l"], registers["h"],
-            0xcd, bit.band(funcToCall,0xff), bit.rshift(funcToCall, 8),
-            0xe1, 0xd1, 0xc1, 0xf1,
-            0xc3, bit.band(oldJump, 0xff), bit.rshift(oldJump, 8)}
+    -- Write code to current location
+    local backupData = writeAndBackupMem(pc, callCode)
 
-        backupData = writeAndBackupMem(wTempLocation, callCode)
+    -- Hook upon jumping to our target function
+    event.onmemoryexecute(function()
+        --print('HOOKED')
+        event.unregisterbyname('callHook')
+        writeAndBackupMem(pc, backupData) -- Restore what we just overwrote
 
+        -- Hook upon returning to scratchLocation
         event.onmemoryexecute(function()
-            event.unregisterbyname('ramCallHook2')
-            gb.useSysBus()
-            -- Restore what we just overwrote
-            memory.write_u16_le(wRamFunction+1, oldJump)
-            writeAndBackupMem(wTempLocation, backupData)
-        end, oldJump, 'ramCallHook2', 'System Bus')
-    end
+            --print('HOOK2')
+            event.unregisterbyname('callHook2')
 
-    -- Replace a function in wram temporarily
-    event.onmemoryexecute(hook, wRamFunction, 'ramCallHook', 'System Bus')
+            local returnCode = { 0xe1, 0xd1, 0xc1, 0xf1, -- pop all
+                0xc3, bit.band(pc, 0xff), bit.rshift(pc, 8) -- Jump back to original code position
+            }
+            local backup2 = writeAndBackupMem(scratchLocation, returnCode)
+
+            -- Hook upon returning to original code position
+            event.onmemoryexecute(function()
+                --print('HOOK3')
+                event.unregisterbyname('callHook3')
+                writeAndBackupMem(scratchLocation, backup2)
+
+            end, pc, 'callHook3', 'System Bus')
+
+        end, scratchLocation, 'callHook2', 'System Bus')
+
+    end, funcToCall, 'callHook', 'System Bus')
 end
 
 

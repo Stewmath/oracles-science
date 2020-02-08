@@ -145,6 +145,9 @@ end
 -- Main code
 console.clear()
 
+
+--gb.call(giveTreasure, {a=0x05,c=0x01})
+
 while true do
     handleInput()
     gui.clearGraphics()
