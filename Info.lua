@@ -40,10 +40,18 @@ function triggerItemMenu()
         return string.format("Get Item: %.2x %s", item, name)
     end)
 
+    if item == -1 then
+        return
+    end
+
     -- Get item level
     level = common.promptByte(function(level)
         return string.format("Level/Amount: %.2x", level)
     end)
+
+    if level == -1 then
+        return
+    end
 
     gb.call(giveTreasure, {a=item, c=level})
     memory.writebyte(wStatusBarNeedsRefresh, 0xff)
@@ -78,11 +86,10 @@ function handleCheat(cheat)
     end
     local keyname = string.gsub(key, 'NumberPad', 'NP')
     if cheat.toggle then
-        gui.text(x + common.COL_PIXELS, y, string.format("%5s %5s: %s", keyname, name, status), color)
+        common.textLine(string.format("%5s %5s: %s", keyname, name, status), color)
     else
-        gui.text(x + common.COL_PIXELS, y, string.format("%5s %5s", keyname, name, status))
+        common.textLine(string.format("%5s %5s", keyname, name, status))
     end
-    y = y+common.ROW_PIXELS
 end
 
 
@@ -106,29 +113,21 @@ while true do
     end
 
     -- Display variables
-    x = 0
-    y = 8*common.ROW_PIXELS
+    common.currentRow = 8
 
-    gui.text(x, y, string.format("X: %.2x <%.2x>", memory.read_u8(0x100d), memory.read_u8(0x100c)))
-    y = y+common.ROW_PIXELS
-    gui.text(x, y, string.format("Y: %.2x <%.2x>", memory.read_u8(0x100b), memory.read_u8(0x100a)))
-    y = y+common.ROW_PIXELS
-    gui.text(x, y, string.format("Knockback timer: %.2x", memory.read_u8(0x102d), memory.read_u8(0x100a)))
-    y = y+common.ROW_PIXELS
-    gui.text(x, y, string.format("Knockback angle: %.2x", memory.read_u8(0x102c), memory.read_u8(0x100a)))
-    y = y+common.ROW_PIXELS
+    common.textLine(string.format("X: %.2x.%.2x", memory.read_u8(0x100d), memory.read_u8(0x100c)))
+    common.textLine(string.format("Y: %.2x.%.2x", memory.read_u8(0x100b), memory.read_u8(0x100a)))
+    common.textLine(string.format("Knockback timer: %.2x", memory.read_u8(0x102d), memory.read_u8(0x100a)))
+    common.textLine(string.format("Knockback angle: %.2x", memory.read_u8(0x102c), memory.read_u8(0x100a)))
 
-    y = y+common.ROW_PIXELS
+    common.textLine('')
 
     -- This can cause lag when unpausing
-    gui.text(x, y, string.format("# loaded obj gfx: %d", numLoadedObjGfx))
-    y = y+common.ROW_PIXELS
-    --gui.text(x, y, string.format("%s", input.get()["NumberPad1"] == nil))
+    common.textLine(string.format("# loaded obj gfx: %d", numLoadedObjGfx))
 
     -- Cheats
-    y = y+common.ROW_PIXELS
-    gui.text(x, y, "CHEATS")
-    y = y+common.ROW_PIXELS
+    common.textLine("")
+    common.textLine("CHEATS")
 
     for cheat in pairs(cheatTable) do
         handleCheat(cheatTable[cheat])

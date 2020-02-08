@@ -1,8 +1,7 @@
 local common = {}
 
 -- Local variables
-local memoryDomains = {}
-local numMemoryDomains = 0
+local memoryDomains = {n=0}
 
 -- Exported variables
 common.keysPressed = {}
@@ -11,21 +10,23 @@ common.keysJustPressed = {}
 
 common.COL_PIXELS = 16
 common.ROW_PIXELS = 16
-common.PROMPT_ROW = 20
+common.PROMPT_ROW = 15
+
+common.currentRow = 0
 
 
 
 -- Exported functions
 
 function common.pushMemDomain()
-    numMemoryDomains = numMemoryDomains+1
-    memoryDomains[numMemoryDomains] = memory.getcurrentmemorydomain()
+    memoryDomains.n = memoryDomains.n+1
+    memoryDomains[memoryDomains.n] = memory.getcurrentmemorydomain()
 end
 
 function common.popMemDomain()
-    memory.usememorydomain(memoryDomains[numMemoryDomains])
-    memoryDomains[numMemoryDomains] = nil
-    numMemoryDomains = numMemoryDomains-1
+    memory.usememorydomain(memoryDomains[memoryDomains.n])
+    memoryDomains[memoryDomains.n] = nil
+    memoryDomains.n = memoryDomains.n-1
 end
 
 -- Update the "common.keysJustPressed" structure
@@ -45,6 +46,12 @@ function common.handleInput()
 end
 
 
+-- Draw a line of text, update "currentRow" to next line
+function common.textLine(text, color)
+    gui.text(0, common.ROW_PIXELS * common.currentRow, text, color)
+    common.currentRow = common.currentRow+1
+end
+
 -- Have the user input a byte using the numpad direction keys.
 function common.promptByte(stringGetterFunc)
     if stringGetterFunc == nil then
@@ -53,22 +60,34 @@ function common.promptByte(stringGetterFunc)
         end
     end
 
-    value = 0
+    local value = 0
+    local minVal = 0
+    local maxVal = 255
+
     while true do
         common.handleInput()
 
-        if common.keysJustPressed['NumberPad8'] and value < 255 then
+        if common.keysJustPressed['NumberPad8'] then -- Up
             value = value+1
         end
-        if common.keysJustPressed['NumberPad2'] and value > 0 then
+        if common.keysJustPressed['NumberPad2'] then -- Down
             value = value-1
+        end
+        if common.keysJustPressed['NumberPad9'] then -- PgUp
+            value = value+16
+        end
+        if common.keysJustPressed['NumberPad3'] then -- PgDn
+            value = value-16
         end
         if common.keysJustPressed['NumberPadEnter'] then
             break
         end
         if common.keysJustPressed['Escape'] then
-            return
+            return -1
         end
+
+        value = math.max(value, minVal)
+        value = math.min(value, maxVal)
 
         gui.text(0, common.PROMPT_ROW * common.ROW_PIXELS, stringGetterFunc(value))
         emu.yield()
