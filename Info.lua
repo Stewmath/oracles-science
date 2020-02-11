@@ -16,7 +16,8 @@ local wActiveRing = ocl.AgSe(0x6cb, 0x6c5)
 local wGlobalFlags = ocl.AgSe(0x6d0, 0x6ca)
 local wStatusBarNeedsRefresh = ocl.AgSe(0xbe9, 0xbea)
 local wLoadedObjectGfx = ocl.AgSe(0xc08, 0xc07)
-local wLoadedObjectGfx = ocl.AgSe(0xc08, 0xc07)
+local wActiveRoom = ocl.AgSe(0xc30, 0xc4c)
+local wActiveRoom = ocl.AgSe(0xc30, 0xc4c)
 --
 
 -- Cheat function handlers
@@ -62,28 +63,71 @@ function triggerRingMenu()
     memory.writebyte(wActiveRing, ring)
 end
 
-function triggerClearFlag()
-    local flag = common.promptByteWithList("Clear Flag...", lists.globalFlags)
-    if not (flag == -1) then
-        common.clearFlag(wGlobalFlags, flag)
+function triggerObjectMenu()
+    local objectIndex = common.promptByteWithList('Object type', {'Interaction', 'Enemy', 'Part'}, {min=1, max=3})
+    if objectIndex == -1 then return end
+    local objectType = { ocl.InteractionObject, ocl.EnemyObject, ocl.PartObject }
+    objectType = objectType[objectIndex]
+
+    local id = common.promptByte(string.format('%s ID', objectType.name))
+    if id == -1 then return end
+    local subid = common.promptByte('SubID')
+    if subid == -1 then return end
+
+    while true do
+        common.handleInput()
+        local mouse = input.getmouse()
+
+        if common.keysJustPressed['Escape'] then
+            return
+        end
+
+        local x = mouse.X
+        local y = mouse.Y
+
+        local inBounds = (not (x == nil)) and not ((y == nil)) and x >= 0 and x < 160 and y >= 0 and y < 144
+
+        if inBounds then
+            local roundX = bit.band(x, 0xf8)
+            local roundY = bit.band(y, 0xf8)
+            gui.drawRectangle(roundX, roundY, 8, 8)
+
+            if mouse.Left then
+                local ret = ocl.spawnObject(objectType, id, subid, roundX, roundY)
+                if ret == -1 then
+                    print(string.format("Couldn't spawn %s %.2x%.2x.", objectType.name, id, subid))
+                end
+                break
+            end
+        end
+        gui.DrawFinish()
+        emu.yield()
     end
 end
 
-function triggerSetFlag()
-    flag = common.promptByteWithList("Set Flag...", lists.globalFlags)
-    if not (flag == -1) then
-        common.setFlag(wGlobalFlags, flag)
+function triggerRoomFlagMenu()
+    function getFlagLocation() -- FIXME
+        return 0x0700
     end
+    list = {'', '', '', 'Visited', '', '', ''}
+    list[0] = 'Layout'
+    flagAddr = getFlagLocation() + memory.readbyte(wActiveRoom)
+    common.editBitset('Edit room flags...', flagAddr, list)
+end
+
+function triggerGlobalFlagMenu()
+    common.editBitset("Edit global flags...", wGlobalFlags, lists.globalFlags)
 end
 
 
 -- Cheat definitions
 cheatTable = {}
 cheatTable[1] = {name="WTW",  toggle=true,  key="NumberPad1", func=toggleWTW}
-cheatTable[2] = {name="RING", toggle=false, key="NumberPad4", func=triggerRingMenu}
-cheatTable[3] = {name="ITEM", toggle=false, key="NumberPad5", func=triggerItemMenu}
-cheatTable[4] = {name="CLEARFLAG", toggle=false, key="NumberPad8", func=triggerClearFlag}
-cheatTable[5] = {name="SETFLAG",   toggle=false, key="NumberPad9", func=triggerSetFlag}
+cheatTable[4] = {name="RING", toggle=false, key="NumberPad4", func=triggerRingMenu}
+cheatTable[5] = {name="ITEM", toggle=false, key="NumberPad5", func=triggerItemMenu}
+cheatTable[6] = {name="OBJECT", toggle=false, key="NumberPad6", func=triggerObjectMenu}
+cheatTable[7] = {name="ROOMFLAG", toggle=false, key="NumberPad7", func=triggerRoomFlagMenu}
+cheatTable[8] = {name="GLOBALFLAG", toggle=false, key="NumberPad8", func=triggerGlobalFlagMenu}
 
 cheatEnabled = {}
 
@@ -119,7 +163,7 @@ end
 -- Main code
 while true do
     common.handleInput()
-    gui.clearGraphics()
+    gui.cleartext()
 
     gb.useWram()
     local numLoadedObjGfx = 0

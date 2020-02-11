@@ -64,16 +64,22 @@ function common.textLine(text, color)
 end
 
 -- Have the user input a byte using the numpad direction keys.
-function common.promptByte(stringGetterFunc)
-    if stringGetterFunc == nil then
-        stringGetterFunc = function(val)
-            return string.format('Value: %.2x', val)
-        end
-    end
-
+function common.promptByte(stringParam)
     local value = 0
     local minVal = 0
     local maxVal = 255
+    local stringGetterFunc
+
+    if stringParam == nil then
+        stringParam = 'Value'
+    end
+
+    -- stringParam can be a string, or a function that generates a string
+    if type(stringParam) == type('') then
+        stringGetterFunc = function(val) return stringParam .. string.format(': %.2x', value) end
+    else
+        stringGetterFunc = stringParam
+    end
 
     while true do
         common.handleInput()
@@ -154,11 +160,11 @@ function common.promptByteWithList(header, list, opt)
 
         local start = math.max(value - size / 2, minVal)
         if start + size > maxVal then
-            start = maxVal - size + 1
+            start = math.max(minVal, maxVal - size + 1)
         end
 
         for i=0,size-1 do
-            index = i+start
+            local index = i+start
             if index >= minVal and index <= maxVal then
                 name = list[index]
                 if name == nil then
@@ -176,6 +182,70 @@ function common.promptByteWithList(header, list, opt)
         emu.yield()
     end
     return value
+end
+
+function common.editBitset(header, addr, list)
+    local value = 0
+    local minVal = 0
+    local maxVal = table.getn(list)
+
+    while true do
+        gui.cleartext()
+        common.handleInput()
+
+        if common.keysPressedAutoRepeat['NumberPad8'] then -- Up
+            value = value-1
+        end
+        if common.keysPressedAutoRepeat['NumberPad2'] then -- Down
+            value = value+1
+        end
+        if common.keysPressedAutoRepeat['NumberPad9'] then -- PgUp
+            value = value-16
+        end
+        if common.keysPressedAutoRepeat['NumberPad3'] then -- PgDn
+            value = value+16
+        end
+        if common.keysPressedAutoRepeat['NumberPadEnter'] then
+            common.toggleFlag(addr, value)
+        end
+        if common.keysPressedAutoRepeat['Escape'] then
+            return -1
+        end
+
+        value = math.max(value, minVal)
+        value = math.min(value, maxVal)
+
+        -- Draw nearby values in list
+        gui.text(0, 4 * common.ROW_PIXELS, header)
+
+        local SCREEN_TOP = 6 * common.ROW_PIXELS
+        local size = 16
+
+        local start = math.max(value - size / 2, minVal) -- Index to show at the top
+        if start + size > maxVal then
+            start = math.max(minVal, maxVal - size + 1)
+        end
+
+        for i=0,size-1 do
+            local index = i+start
+            if index >= minVal and index <= maxVal then
+                name = list[index]
+                if name == nil then
+                    name = ''
+                end
+                local bitset = common.checkFlag(addr, index)
+                if bitset then bitset = 1 else bitset = 0 end
+                if index == value then
+                    str = string.format('> [%d] %.2x %s', bitset, index, name)
+                else
+                    str = string.format('  [%d] %.2x %s', bitset, index, name)
+                end
+                gui.text(0, i * common.ROW_PIXELS + SCREEN_TOP, str) 
+            end
+        end
+
+        emu.yield()
+    end
 end
 
 
@@ -207,6 +277,15 @@ function common.promptNumberAlternate()
     return inputString
 end
 
+-- Read a bit in a bitset (ie. global flags)
+function common.checkFlag(addr, flag)
+    local addr = addr + flag / 8
+    local b = bit.lshift(1, bit.band(flag, 7))
+
+    local m = memory.readbyte(addr)
+    return not (bit.band(m, b) == 0)
+end
+
 -- Set a bit in a bitset (ie. global flags)
 function common.setFlag(addr, flag)
     local addr = addr + flag / 8
@@ -225,6 +304,15 @@ function common.clearFlag(addr, flag)
     local m = memory.readbyte(addr)
     m = bit.band(m, bit.bxor(0xff, b))
     memory.writebyte(addr, m)
+end
+
+-- Toggle a flag
+function common.toggleFlag(addr, flag)
+    if common.checkFlag(addr, flag) then
+        common.clearFlag(addr, flag)
+    else
+        common.setFlag(addr, flag)
+    end
 end
 
 return common
