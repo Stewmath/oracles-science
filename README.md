@@ -12,5 +12,6 @@ See it in action: https://youtu.be/NJgs07r5uek
 All controls are done with the numpad to avoid conflicts with Bizhawk
 keybindings.
 
-Press a numpad key to active a function. Press numpad up/down/pgup/pgdown to
-navigate options. Press numpad enter to select something.
+Press a numpad key to activate a function. Press numpad up/down/pgup/pgdown to
+navigate options. Press numpad enter to select something. Press escape to exit
+a menu.
