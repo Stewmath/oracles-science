@@ -183,6 +183,47 @@ octogonRoom = (1, # Number of random enemies
 [0x55, 0x59] # Locations of fixed-position enemy objects (can't spawn there)
 )
 
+# spike room in seasons d7, on the way to the cape.
+# Assuming Link spawns in on the bottom rightmost hole, anything within 3 tiles
+# is an invalid spot (that's reflected on the map below). Haven't 100% verified
+# if that's totally accurate.
+d7SpikeRoom = (2, # Number of random enemies
+-1, # Direction entered from
+'''
+111111111111111
+111100000111111
+100000000111111
+111111110111111
+111111110111111
+111111110111111
+111111110111111
+111111110111111
+111111110111111
+111111110111111
+111111111111111
+'''.strip().replace('\n', ''),
+[]
+)
+
+# Desert pit in seasons with like-likes
+desertPitRoom = (4, # Number of random enemies
+-1, # Direction entered from
+'''
+111111111111111
+111111111111111
+111111111111111
+111101111101111
+111001111100111
+111011111100111
+111001111101111
+111101111101111
+111111111111111
+111111111111111
+111111111111111
+'''.strip().replace('\n', ''),
+[]
+)
+
 roomIsLarge = True
 
 if roomIsLarge:
@@ -260,6 +301,8 @@ def spawnEnemiesInRoom(state, room, verbose=False):
         return p
 
     def checkValidPosition(pos):
+        if direction == -1:
+            return True
         if roomIsLarge:
             table = [
                     [1, height-3, 1, width-1],
@@ -325,4 +368,4 @@ def spawnEnemiesInRoom(state, room, verbose=False):
 #print([hex(x) for x in spawnEnemiesInRoom(rng, d4Room)])
 
 # Look for a seed where Octogon doesn't spawn when entering room from bottom
-print(list(findSequence([lambda s: -1 in spawnEnemiesInRoom(s, octogonRoom)])))
+print(list(findSequence([lambda s: -1 in spawnEnemiesInRoom(s, desertPitRoom)])))
