@@ -367,5 +367,8 @@ def spawnEnemiesInRoom(state, room, verbose=False):
 #rng.rng2 = 0xfd
 #print([hex(x) for x in spawnEnemiesInRoom(rng, d4Room)])
 
-# Look for a seed where Octogon doesn't spawn when entering room from bottom
+# Look for a seed where a like-like fails to spawn in the samasa desert pit
 print(list(findSequence([lambda s: -1 in spawnEnemiesInRoom(s, desertPitRoom)])))
+
+# Look for a seed where Octogon doesn't spawn when entering room from bottom
+#print(list(findSequence([lambda s: -1 in spawnEnemiesInRoom(s, octogonRoom)])))
