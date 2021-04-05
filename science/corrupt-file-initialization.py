@@ -21,6 +21,8 @@ fileBank = 0x07
 
 if romIsSeasons(rom) and getRomRegion(rom) == 'JP':
     tableAddr = bankedAddress(fileBank, 0x417a)
+if romIsAges(rom) and getRomRegion(rom) == 'JP':
+    tableAddr = bankedAddress(fileBank, 0x4182)
 else:
     print('Unsupported region')
     sys.exit(1)
